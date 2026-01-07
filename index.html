@@ -315,19 +315,18 @@
       e.target.reset();
     });
 
-    /* ------------------------------- Admins ------------------------------- */
-    onSnapshot(query(adminsRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("adminsBoard");
-      board.innerHTML = "";
-      snap.forEach(docSnap => {
-        const d = docSnap.data();
-        const item = document.createElement("div"); item.className="item";
-        const main = document.createElement("div"); main.className="item-main";
-        main.innerHTML = `<strong>${d.name || "Admin"}</strong><div>Role: ${d.role || "-"}</div>`;
-        const actions = buildActions({ coll:"admins", docSnap, fields:["name","role"] });
-        item.appendChild(main); item.appendChild(actions); board.appendChild(item);
-      });
-    });
+adminForm.addEventListener("submit", async e => {
+  e.preventDefault(); // stops page reload
+  const name = adminName.value.trim();
+  const role = adminRole.value.trim();
+  if (!name || !role) return;
+  await addDoc(adminsRef, {
+    name, role,
+    tsClient: Date.now(),
+    tsServer: serverTimestamp()
+  });
+  e.target.reset();
+});
 
     adminForm.addEventListener("submit", async e => {
       e.preventDefault();
@@ -493,3 +492,4 @@
 </body>
 
 </html>
+
