@@ -333,14 +333,73 @@ adminForm.addEventListener("submit", async e => {
   e.target.reset();
 });
 
-    adminForm.addEventListener("submit", async e => {
-      e.preventDefault();
-      const name = adminName.value.trim();
-      const role = adminRole.value.trim();
-      if (!name || !role) return;
-      await addDoc(adminsRef, { name, role, tsClient: Date.now(), tsServer: serverTimestamp() });
-      e.target.reset();
-    });
+  // Reference to Firestore collection
+const adminsRef = collection(db, "admins");
+
+// Render admins list live
+onSnapshot(query(adminsRef, orderBy("tsClient","desc")), snap => {
+  const board = document.getElementById("adminsBoard");
+  board.innerHTML = "";
+  snap.forEach(docSnap => {
+    const d = docSnap.data();
+    const item = document.createElement("div");
+    item.className = "item";
+
+    const main = document.createElement("div");
+    main.className = "item-main";
+    main.innerHTML = `
+      <strong>${d.name || "Admin"}</strong>
+      <div>Role: ${d.role || "-"}</div>
+      <div class="item-meta">Added: ${d.tsServer ? d.tsServer.toDate().toLocaleString() : ""}</div>
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    // Edit button
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn";
+    editBtn.textContent = "Edit";
+    editBtn.onclick = async () => {
+      const newName = prompt("Edit admin name:", d.name);
+      const newRole = prompt("Edit role:", d.role);
+      if (newName && newRole) {
+        await updateDoc(doc(db, "admins", docSnap.id), { name: newName, role: newRole });
+      }
+    };
+
+    // Delete button
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn";
+    delBtn.textContent = "Delete";
+    delBtn.onclick = async () => {
+      if (confirm("Delete this admin?")) {
+        await deleteDoc(doc(db, "admins", docSnap.id));
+      }
+    };
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(main);
+    item.appendChild(actions);
+    board.appendChild(item);
+  });
+});
+
+// Handle form submission
+adminForm.addEventListener("submit", async e => {
+  e.preventDefault(); // prevent page reload
+  const name = adminName.value.trim();
+  const role = adminRole.value.trim();
+  if (!name || !role) return;
+  await addDoc(adminsRef, {
+    name, role,
+    tsClient: Date.now(),
+    tsServer: serverTimestamp()
+  });
+  e.target.reset();
+});
 
     /* ---------------------------- Attractions ---------------------------- */
     onSnapshot(query(attractionsRef, orderBy("tsClient","desc")), snap => {
@@ -497,5 +556,6 @@ adminForm.addEventListener("submit", async e => {
 </body>
 
 </html>
+
 
 
