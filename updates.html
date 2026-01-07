@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Updates - Bros Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#0d0d0d; --panel:#1a1a1a; --neon:#00ff66; --muted:#82ffa6; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--neon); font-family:system-ui, Trebuchet MS, sans-serif; }
+    header { padding:1.5rem; text-align:center; background:var(--panel); border-bottom:2px solid var(--neon); }
+    h1 { margin:0; }
+    nav { background:var(--bg); border-bottom:2px solid var(--neon); position:sticky; top:0; z-index:1000; }
+    nav ul { list-style:none; display:flex; flex-wrap:wrap; gap:.5rem; padding:.6rem; margin:0; justify-content:center; }
+    nav a { color:var(--neon); text-decoration:none; padding:.4rem .8rem; border:1px solid var(--neon); border-radius:4px; font-weight:600; }
+    nav a:hover { background:var(--neon); color:var(--bg); }
+
+    section { max-width:1100px; margin:auto; padding:1rem; }
+    h2 { border-bottom:2px solid var(--neon); padding-bottom:.3rem; }
+    .panel { background:var(--panel); border:1px solid var(--neon); border-radius:8px; padding:1rem; }
+    .list { display:flex; flex-direction:column; gap:.6rem; }
+    .item { display:flex; justify-content:space-between; align-items:flex-start; border:1px dashed var(--neon); border-radius:6px; padding:.6rem; }
+    .item-main { flex:1; white-space:pre-wrap; }
+    .item-meta { color:var(--muted); font-size:.9rem; margin-top:.3rem; }
+    .actions { display:flex; gap:.4rem; flex-wrap:wrap; }
+    .btn { background:none; border:1px solid var(--neon); color:var(--neon); padding:.25rem .6rem; border-radius:4px; cursor:pointer; }
+    .btn:hover { background:var(--neon); color:var(--bg); }
+    form { display:grid; gap:.6rem; margin-top:.8rem; }
+    input, textarea, button { background:var(--bg); color:var(--neon); border:1px solid var(--neon); border-radius:6px; padding:.6rem; }
+    textarea { min-height:90px; }
+    button { cursor:pointer; }
+    button:hover { background:var(--neon); color:var(--bg); }
+
+    /* Calendar visuals */
+    #calendarTable {
+      width:100%;
+      height:720px;
+      border-collapse:collapse;
+      font-size:1.1rem;
+      table-layout:fixed;
+    }
+    #calendarTable th, #calendarTable td {
+      border:1px solid var(--neon);
+      padding:18px;
+      min-height:100px;
+      vertical-align:top;
+    }
+    .day-num { font-weight:700; margin-bottom:.4rem; display:block; }
+    .event { border:1px dashed var(--muted); border-radius:6px; padding:.4rem; margin:.4rem 0; text-align:left; }
+    .event .title { font-weight:700; }
+    .event .meta { font-size:.9rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Bros Hub</h1>
+    <div class="item-meta">Announcements • News • Calendar</div>
+  </header>
+
+  <nav>
+    <ul>
+      
+      
+      <li><a href="index.html">Home</a></li>
+      <li><a href="updates.html">Updates</a></li>
+
+      <li><a href="admin.html">Bookings Admin</a></li>
+    </ul>
+  </nav>
+
+  <!-- Announcements -->
+  <section id="announcements">
+    <h2>Announcements</h2>
+    <div class="panel">
+      <div id="announcementsBoard" class="list"></div>
+      <form id="announcementForm">
+        <input id="announcementName" placeholder="Your name" required />
+        <input id="announcementTitle" placeholder="Title" required />
+        <textarea id="announcementContent" placeholder="Details..." required></textarea>
+        <button type="submit">Add Announcement</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- News -->
+  <section id="news">
+    <h2>News</h2>
+    <div class="panel">
+      <div id="newsBoard" class="list"></div>
+      <form id="newsForm">
+        <input id="newsName" placeholder="Your name" required />
+        <input id="newsTitle" placeholder="Headline" required />
+        <textarea id="newsContent" placeholder="News content..." required></textarea>
+        <button type="submit">Add News</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Calendar -->
+  <section id="calendar">
+    <h2>Calendar</h2>
+    <div class="panel">
+      <table id="calendarTable">
+        <thead>
+          <tr>
+            <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
+          </tr>
+        </thead>
+        <tbody id="calendarBody"></tbody>
+      </table>
+      <form id="calendarForm">
+        <input id="calendarName" placeholder="Your name" required />
+        <input id="calendarTitle" placeholder="Event title" required />
+        <input id="calendarDate" type="date" required />
+        <textarea id="calendarDetails" placeholder="Details..." required></textarea>
+        <button type="submit">Add Event</button>
+      </form>
+    </div>
+  </section>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+    import {
+      getFirestore, collection, addDoc, serverTimestamp,
+      onSnapshot, query, orderBy, doc, updateDoc, deleteDoc
+    } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+    // Your Firebase config (from bros-hub-cdbf2)
+    const firebaseConfig = {
+      apiKey: "AIzaSyAOWDg95YOPCBYzN5vWOVBik0AUNOyqZeI",
+      authDomain: "bros-hub-cdbf2.firebaseapp.com",
+      projectId: "bros-hub-cdbf2",
+      storageBucket: "bros-hub-cdbf2.firebasestorage.app",
+      messagingSenderId: "704367128264",
+      appId: "1:704367128264:web:2234b7b809a4691b327ffd",
+      measurementId: "G-1DG5BKM4SH"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const announcementsRef = collection(db, "announcements");
+    const newsRef = collection(db, "news");
+    const calendarRef = collection(db, "calendar");
+
+    // Timestamp formatter (shows server time when available)
+    function formatTime(ts) {
+      if (!ts) return "";
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleString();
+    }
+
+    /* ---------------- Announcements ---------------- */
+    onSnapshot(query(announcementsRef, orderBy("tsClient","desc")), snap => {
+      const board = document.getElementById("announcementsBoard");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div");
+        item.className = "item";
+
+        const main = document.createElement("div");
+        main.className = "item-main";
+        main.innerHTML = `
+          <strong>${d.title || "Announcement"}</strong>
+          <div>by ${d.name || "Anonymous"}</div>
+          <div>${d.content || ""}</div>
+          <div class="item-meta">Posted: ${formatTime(d.tsServer) || formatTime(d.tsClient)}</div>
+        `;
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn";
+        editBtn.textContent = "Edit";
+        editBtn.onclick = async () => {
+          const newTitle = prompt("Edit title:", d.title);
+          const newContent = prompt("Edit content:", d.content);
+          if (newTitle && newContent) {
+            await updateDoc(doc(db, "announcements", docSnap.id), { title: newTitle, content: newContent });
+          }
+        };
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn";
+        delBtn.textContent = "Delete";
+        delBtn.onclick = async () => {
+          if (confirm("Delete this announcement?")) await deleteDoc(doc(db, "announcements", docSnap.id));
+        };
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        item.appendChild(main);
+        item.appendChild(actions);
+        board.appendChild(item);
+      });
+    });
+
+    announcementForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = announcementName.value.trim();
+      const title = announcementTitle.value.trim();
+      const content = announcementContent.value.trim();
+      if (!name || !title || !content) return;
+      await addDoc(announcementsRef, {
+        name, title, content,
+        tsClient: Date.now(),
+        tsServer: serverTimestamp()
+      });
+      e.target.reset();
+    });
+
+    /* ---------------- News ---------------- */
+    onSnapshot(query(newsRef, orderBy("tsClient","desc")), snap => {
+      const board = document.getElementById("newsBoard");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div");
+        item.className = "item";
+
+        const main = document.createElement("div");
+        main.className = "item-main";
+        main.innerHTML = `
+          <strong>${d.title || "Headline"}</strong>
+          <div>by ${d.name || "Anonymous"}</div>
+          <div>${d.content || ""}</div>
+          <div class="item-meta">Posted: ${formatTime(d.tsServer) || formatTime(d.tsClient)}</div>
+        `;
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn";
+        editBtn.textContent = "Edit";
+        editBtn.onclick = async () => {
+          const newTitle = prompt("Edit title:", d.title);
+          const newContent = prompt("Edit content:", d.content);
+          if (newTitle && newContent) {
+            await updateDoc(doc(db, "news", docSnap.id), { title: newTitle, content: newContent });
+          }
+        };
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn";
+        delBtn.textContent = "Delete";
+        delBtn.onclick = async () => {
+          if (confirm("Delete this news item?")) await deleteDoc(doc(db, "news", docSnap.id));
+        };
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        item.appendChild(main);
+        item.appendChild(actions);
+        board.appendChild(item);
+      });
+    });
+
+    newsForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = newsName.value.trim();
+      const title = newsTitle.value.trim();
+      const content = newsContent.value.trim();
+      if (!name || !title || !content) return;
+      await addDoc(newsRef, {
+        name, title, content,
+        tsClient: Date.now(),
+        tsServer: serverTimestamp()
+      });
+      e.target.reset();
+    });
+
+    /* ---------------- Calendar ---------------- */
+    function buildCalendar(events) {
+      const tbody = document.getElementById("calendarBody");
+      tbody.innerHTML = "";
+
+      let day = 1;
+      for (let r = 0; r < 5; r++) {
+        const tr = document.createElement("tr");
+        for (let c = 0; c < 7; c++) {
+          const td = document.createElement("td");
+          if (day <= 31) {
+            const num = document.createElement("span");
+            num.className = "day-num";
+            num.textContent = day;
+            td.appendChild(num);
+
+            const todays = events.filter(ev => {
+              const parts = (ev.date || "").split("-");
+              const dNum = parseInt(parts[2], 10);
+              return dNum === day;
+            });
+
+            todays.forEach(ev => {
+              const wrap = document.createElement("div");
+              wrap.className = "event";
+              wrap.innerHTML = `
+                <div class="title">${ev.title}</div>
+                <div>${ev.details}</div>
+                <div class="meta">by ${ev.name} • Posted: ${formatTime(ev.tsServer) || formatTime(ev.tsClient)}</div>
+              `;
+
+              const edit = document.createElement("button");
+              edit.className = "btn";
+              edit.textContent = "Edit";
+              edit.onclick = async () => {
+                const newTitle = prompt("Edit title:", ev.title);
+                const newDetails = prompt("Edit details:", ev.details);
+                if (newTitle && newDetails) {
+                  await updateDoc(doc(db, "calendar", ev.id), { title: newTitle, details: newDetails });
+                }
+              };
+
+              const del = document.createElement("button");
+              del.className = "btn";
+              del.textContent = "Delete";
+              del.onclick = async () => {
+                if (confirm("Delete this event?")) await deleteDoc(doc(db, "calendar", ev.id));
+              };
+
+              wrap.appendChild(edit);
+              wrap.appendChild(del);
+              td.appendChild(wrap);
+            });
+
+            day++;
+          }
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+    }
+
+    onSnapshot(query(calendarRef, orderBy("tsClient","asc")), snap => {
+      const events = [];
+      snap.forEach(docSnap => events.push({ id: docSnap.id, ...docSnap.data() }));
+      buildCalendar(events);
+    });
+
+    calendarForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = calendarName.value.trim();
+      const title = calendarTitle.value.trim();
+      const date = calendarDate.value; // YYYY-MM-DD
+      const details = calendarDetails.value.trim();
+      if (!name || !title || !date || !details) return;
+      await addDoc(calendarRef, {
+        name, title, date, details,
+        tsClient: Date.now(),
+        tsServer: serverTimestamp()
+      });
+      e.target.reset();
+    });
+  </script>
+</body>
+</html>

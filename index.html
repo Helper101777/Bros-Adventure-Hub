@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bros Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#0d0d0d; --panel:#1a1a1a; --neon:#00ff66; --muted:#82ffa6; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--neon); font-family:system-ui, Trebuchet MS, sans-serif; }
+    header { padding:1.5rem; text-align:center; background:var(--panel); border-bottom:2px solid var(--neon); }
+    h1 { margin:0; }
+    nav { background:var(--bg); border-bottom:2px solid var(--neon); position:sticky; top:0; z-index:1000; }
+    nav ul { list-style:none; display:flex; flex-wrap:wrap; gap:.5rem; padding:.6rem; margin:0; justify-content:center; }
+    nav a { color:var(--neon); text-decoration:none; padding:.4rem .8rem; border:1px solid var(--neon); border-radius:4px; font-weight:600; }
+    nav a:hover { background:var(--neon); color:var(--bg); }
+
+    section { max-width:1100px; margin:auto; padding:1rem; }
+    h2 { border-bottom:2px solid var(--neon); padding-bottom:.3rem; }
+    .panel { background:var(--panel); border:1px solid var(--neon); border-radius:8px; padding:1rem; }
+    .list { display:flex; flex-direction:column; gap:.6rem; }
+    .item { display:flex; justify-content:space-between; align-items:flex-start; border:1px dashed var(--neon); border-radius:6px; padding:.6rem; }
+    .item-main { flex:1; white-space:pre-wrap; }
+    .actions { display:flex; gap:.4rem; flex-wrap:wrap; }
+    .btn { background:none; border:1px solid var(--neon); color:var(--neon); padding:.25rem .6rem; border-radius:4px; cursor:pointer; }
+    .btn:hover { background:var(--neon); color:var(--bg); }
+    form { display:grid; gap:.6rem; margin-top:.8rem; }
+    input, textarea, button { background:var(--bg); color:var(--neon); border:1px solid var(--neon); border-radius:6px; padding:.6rem; }
+    textarea { min-height:90px; }
+    button { cursor:pointer; }
+    button:hover { background:var(--neon); color:var(--bg); }
+
+    /* Calendar visuals */
+    #calendarTable {
+      width:100%;
+      height:720px;
+      border-collapse:collapse;
+      font-size:1.1rem;
+      table-layout:fixed;
+    }
+    #calendarTable th, #calendarTable td {
+      border:1px solid var(--neon);
+      padding:18px;
+      min-width:120px;
+      min-height:100px;
+      vertical-align:top;
+    }
+    .day-num { font-weight:700; margin-bottom:.4rem; display:block; }
+    .event { border:1px dashed var(--muted); border-radius:6px; padding:.4rem; margin:.4rem 0; text-align:left; }
+    .event .title { font-weight:700; }
+    .event .meta { font-size:.9rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Bros Hub</h1>
+    <div class="item-meta">Neon-green modular hub</div>
+  </header>
+
+  <nav>
+  <ul>
+    <li><a href="index.html" class="active">Home</a></li>
+  
+    <li><a href="updates.html">Updates</a></li>
+    <li><a href="admin.html">Bookings Admin</a></li>
+  </ul>
+</nav>
+  <!-- Chat -->
+  <section id="chat">
+    <h2>Chat</h2>
+    <div class="panel">
+      <div id="messages" class="list"></div>
+      <form id="messageForm">
+        <input id="messageName" placeholder="Your name" required />
+        <input id="messageInput" placeholder="Type message..." required />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Stories -->
+  <section id="stories">
+    <h2>Stories</h2>
+    <div class="panel">
+      <div id="storiesBoard" class="list"></div>
+      <form id="storyForm">
+        <input id="storyName" placeholder="Your name" required />
+        <input id="storyTitle" placeholder="Title" required />
+        <textarea id="storyContent" placeholder="Content" required></textarea>
+        <button type="submit">Add Story</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Notes -->
+  <section id="notes">
+    <h2>Notes</h2>
+    <div class="panel">
+      <div id="notesBoard" class="list"></div>
+      <form id="noteForm">
+        <input id="noteName" placeholder="Your name" required />
+        <input id="noteInput" placeholder="Write a note..." required />
+        <button type="submit">Add Note</button>
+      </form>
+    </div>
+  </section>
+
+ 
+  <!-- Admins -->
+  <section id="admins">
+    <h2>Admins</h2>
+    <div class="panel">
+      <div id="adminsBoard" class="list"></div>
+      <form id="adminForm">
+        <input id="adminName" placeholder="Admin name" required />
+        <input id="adminRole" placeholder="Role" required />
+        <button type="submit">Add Admin</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Attractions -->
+  <section id="attractions">
+    <h2>Attractions</h2>
+    <div class="panel">
+      <div id="attractionsBoard" class="list"></div>
+      <form id="attractionForm">
+        <input id="attractionAddedBy" placeholder="Your name" required />
+        <input id="attractionName" placeholder="Attraction name" required />
+        <input id="attractionPrice" type="number" step="0.01" placeholder="Price" required />
+        <button type="submit">Add Attraction</button>
+      </form>
+    </div>
+  </section>
+
+  
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+    import {
+      getFirestore, collection, addDoc, serverTimestamp,
+      onSnapshot, query, orderBy, doc, updateDoc, deleteDoc
+    } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAOWDg95YOPCBYzN5vWOVBik0AUNOyqZeI",
+      authDomain: "bros-hub-cdbf2.firebaseapp.com",
+      projectId: "bros-hub-cdbf2",
+      storageBucket: "bros-hub-cdbf2.firebasestorage.app",
+      messagingSenderId: "704367128264",
+      appId: "1:704367128264:web:2234b7b809a4691b327ffd",
+      measurementId: "G-1DG5BKM4SH"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Collections
+    const messagesRef = collection(db, "messages");
+    const storiesRef = collection(db, "stories");
+    const notesRef = collection(db, "notes");
+    const newsRef = collection(db, "news");
+    const announcementsRef = collection(db, "announcements");
+    const adminsRef = collection(db, "admins");
+    const attractionsRef = collection(db, "attractions");
+    const bookingsRef = collection(db, "bookings");
+    const calendarRef = collection(db, "calendar");
+
+    // Utility: actions builder (Edit/Delete prompt-based)
+    function buildActions({ coll, docSnap, fields }) {
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn";
+      editBtn.textContent = "Edit";
+      editBtn.onclick = async () => {
+        const updates = {};
+        for (const f of fields) {
+          const current = docSnap.data()[f] ?? "";
+          const val = prompt(`Edit ${f}:`, current);
+          if (val === null) return;
+          updates[f] = val;
+        }
+        if (Object.keys(updates).length) {
+          await updateDoc(doc(db, coll, docSnap.id), updates);
+        }
+      };
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn";
+      delBtn.textContent = "Delete";
+      delBtn.onclick = async () => {
+        if (confirm("Delete this item?")) await deleteDoc(doc(db, coll, docSnap.id));
+      };
+
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+      return actions;
+    }
+
+    /* ------------------------------- Chat ------------------------------- */
+    onSnapshot(query(messagesRef, orderBy("tsClient","asc")), snap => {
+      const board = document.getElementById("messages");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div");
+        item.className = "item";
+        const main = document.createElement("div");
+        main.className = "item-main";
+        main.innerHTML = `<strong>${d.name || "Anonymous"}:</strong> ${d.text || ""}`;
+        const actions = buildActions({ coll:"messages", docSnap, fields:["name","text"] });
+        item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+      });
+    });
+
+    messageForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = messageName.value.trim();
+      const text = messageInput.value.trim();
+      if (!name || !text) return;
+      await addDoc(messagesRef, { name, text, tsClient: Date.now(), tsServer: serverTimestamp() });
+      e.target.reset();
+    });
+
+    /* ------------------------------- Stories ------------------------------- */
+    onSnapshot(query(storiesRef, orderBy("tsClient","desc")), snap => {
+      const board = document.getElementById("storiesBoard");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div"); item.className="item";
+        const main = document.createElement("div"); main.className="item-main";
+        main.innerHTML = `<strong>${d.title || "Untitled"}</strong>
+          <div>by ${d.name || "Anonymous"}</div><div>${d.content || ""}</div>`;
+        const actions = buildActions({ coll:"stories", docSnap, fields:["name","title","content"] });
+        item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+      });
+    });
+
+    storyForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = storyName.value.trim();
+      const title = storyTitle.value.trim();
+      const content = storyContent.value.trim();
+      if (!name || !title || !content) return;
+      await addDoc(storiesRef, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
+      e.target.reset();
+    });
+
+    /* ------------------------------- Notes ------------------------------- */
+    onSnapshot(query(notesRef, orderBy("tsClient","desc")), snap => {
+      const board = document.getElementById("notesBoard");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div"); item.className="item";
+        const main = document.createElement("div"); main.className="item-main";
+        main.innerHTML = `<strong>${d.name || "Anonymous"}:</strong> ${d.text || ""}`;
+        const actions = buildActions({ coll:"notes", docSnap, fields:["name","text"] });
+        item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+      });
+    });
+
+    noteForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = noteName.value.trim();
+      const text = noteInput.value.trim();
+      if (!name || !text) return;
+      await addDoc(notesRef, { name, text, tsClient: Date.now(), tsServer: serverTimestamp() });
+      e.target.reset();
+    });
+
+    /* ------------------------------- News ------------------------------- */
+    onSnapshot(query(newsRef, orderBy("tsClient","desc")), snap => {
+      const board = document.getElementById("newsBoard");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div"); item.className="item";
+        const main = document.createElement("div"); main.className="item-main";
+        main.innerHTML = `<strong>${d.title || "Headline"}</strong>
+          <div>by ${d.name || "Anonymous"}</div><div>${d.content || ""}</div>`;
+        const actions = buildActions({ coll:"news", docSnap, fields:["name","title","content"] });
+        item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+      });
+    });
+
+    newsForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = newsName.value.trim();
+      const title = newsTitle.value.trim();
+      const content = newsContent.value.trim();
+      if (!name || !title || !content) return;
+      await addDoc(newsRef, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
+      e.target.reset();
+    });
+
+    /* ---------------------------- Announcements ---------------------------- */
+    onSnapshot(query(announcementsRef, orderBy("tsClient","desc")), snap => {
+      const board = document.getElementById("announcementsBoard");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div"); item.className="item";
+        const main = document.createElement("div"); main.className="item-main";
+        main.innerHTML = `<strong>${d.title || "Announcement"}</strong>
+          <div>by ${d.name || "Anonymous"}</div><div>${d.content || ""}</div>`;
+        const actions = buildActions({ coll:"announcements", docSnap, fields:["name","title","content"] });
+        item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+      });
+    });
+
+    announcementForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = announcementName.value.trim();
+      const title = announcementTitle.value.trim();
+      const content = announcementContent.value.trim();
+      if (!name || !title || !content) return;
+      await addDoc(announcementsRef, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
+      e.target.reset();
+    });
+
+    /* ------------------------------- Admins ------------------------------- */
+    onSnapshot(query(adminsRef, orderBy("tsClient","desc")), snap => {
+      const board = document.getElementById("adminsBoard");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div"); item.className="item";
+        const main = document.createElement("div"); main.className="item-main";
+        main.innerHTML = `<strong>${d.name || "Admin"}</strong><div>Role: ${d.role || "-"}</div>`;
+        const actions = buildActions({ coll:"admins", docSnap, fields:["name","role"] });
+        item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+      });
+    });
+
+    adminForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = adminName.value.trim();
+      const role = adminRole.value.trim();
+      if (!name || !role) return;
+      await addDoc(adminsRef, { name, role, tsClient: Date.now(), tsServer: serverTimestamp() });
+      e.target.reset();
+    });
+
+    /* ---------------------------- Attractions ---------------------------- */
+    onSnapshot(query(attractionsRef, orderBy("tsClient","desc")), snap => {
+      const board = document.getElementById("attractionsBoard");
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = document.createElement("div"); item.className="item";
+
+        const main = document.createElement("div"); main.className="item-main";
+        main.innerHTML = `<strong>${d.name || "Attraction"}</strong> — $${d.price || "-"}
+          <div class="item-meta">Added by ${d.addedBy || "Anonymous"}</div>
+          <div class="item-meta">Status: ${d.available ? "Available" : "Unavailable"}</div>`;
+
+        const actions = document.createElement("div"); actions.className="actions";
+
+        if (d.available) {
+          const bookBtn = document.createElement("button");
+          bookBtn.className = "btn"; bookBtn.textContent = "Book Now";
+          bookBtn.onclick = async () => {
+            const customer = prompt("Enter your name to book:");
+            if (!customer || !customer.trim()) { alert("Name is required to book!"); return; }
+            await addDoc(bookingsRef, {
+              customer, attraction: d.name, price: d.price, status: "pending",
+              tsClient: Date.now(), tsServer: serverTimestamp()
+            });
+            alert(`Booking created for ${d.name} by ${customer}`);
+          };
+          actions.appendChild(bookBtn);
+        }
+
+        const toggleBtn = document.createElement("button");
+        toggleBtn.className = "btn";
+        toggleBtn.textContent = d.available ? "Mark Unavailable" : "Mark Available";
+        toggleBtn.onclick = async () => {
+          await updateDoc(doc(db, "attractions", docSnap.id), { available: !d.available });
+        };
+        actions.appendChild(toggleBtn);
+
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn"; editBtn.textContent = "Edit";
+        editBtn.onclick = async () => {
+          const newName = prompt("Edit attraction name:", d.name);
+          const newPrice = prompt("Edit price:", d.price);
+          if (newName && newPrice) {
+            await updateDoc(doc(db, "attractions", docSnap.id), { name: newName, price: newPrice });
+          }
+        };
+        actions.appendChild(editBtn);
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn"; delBtn.textContent = "Delete";
+        delBtn.onclick = async () => {
+          if (confirm("Delete this attraction?")) await deleteDoc(doc(db, "attractions", docSnap.id));
+        };
+        actions.appendChild(delBtn);
+
+        item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+      });
+    });
+
+    attractionForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const addedBy = attractionAddedBy.value.trim();
+      const name = attractionName.value.trim();
+      const price = attractionPrice.value.trim();
+      if (!addedBy || !name || !price) return;
+      await addDoc(attractionsRef, {
+        addedBy, name, price, available: true,
+        tsClient: Date.now(), tsServer: serverTimestamp()
+      });
+      e.target.reset();
+    });
+
+    /* ------------------------------ Calendar ------------------------------ */
+    function buildCalendarGrid(events) {
+      const tbody = document.getElementById("calendarBody");
+      tbody.innerHTML = "";
+      let day = 1;
+
+      for (let r = 0; r < 5; r++) { // 5 rows => 35 cells (covers 31 days)
+        const tr = document.createElement("tr");
+        for (let c = 0; c < 7; c++) {
+          const td = document.createElement("td");
+          if (day <= 31) {
+            const num = document.createElement("span");
+            num.className = "day-num";
+            num.textContent = day;
+            td.appendChild(num);
+
+            const todays = events.filter(ev => {
+              const parts = (ev.date || "").split("-");
+              const dNum = parseInt(parts[2], 10);
+              return dNum === day;
+            });
+
+            todays.forEach(ev => {
+              const wrap = document.createElement("div");
+              wrap.className = "event";
+              wrap.innerHTML = `
+                <div class="title">${ev.title}</div>
+                <div>${ev.details}</div>
+                <div class="meta">by ${ev.name}</div>
+              `;
+
+              const edit = document.createElement("button");
+              edit.className = "btn";
+              edit.textContent = "Edit";
+              edit.onclick = async () => {
+                const newTitle = prompt("Edit title:", ev.title);
+                const newDetails = prompt("Edit details:", ev.details);
+                if (newTitle && newDetails) {
+                  await updateDoc(doc(db, "calendar", ev.id), { title: newTitle, details: newDetails });
+                }
+              };
+
+              const del = document.createElement("button");
+              del.className = "btn";
+              del.textContent = "Delete";
+              del.onclick = async () => {
+                if (confirm("Delete this event?")) await deleteDoc(doc(db, "calendar", ev.id));
+              };
+
+              wrap.appendChild(edit);
+              wrap.appendChild(del);
+              td.appendChild(wrap);
+            });
+
+            day++;
+          }
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+    }
+
+    onSnapshot(query(calendarRef, orderBy("tsClient","asc")), snap => {
+      const events = [];
+      snap.forEach(docSnap => events.push({ id: docSnap.id, ...docSnap.data() }));
+      buildCalendarGrid(events);
+    });
+
+    calendarForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = calendarName.value.trim();
+      const title = calendarTitle.value.trim();
+      const date = calendarDate.value; // YYYY-MM-DD
+      const details = calendarDetails.value.trim();
+      if (!name || !title || !date || !details) return;
+      await addDoc(calendarRef, { name, title, date, details, tsClient: Date.now(), tsServer: serverTimestamp() });
+      e.target.reset();
+    });
+  </script>
+</body>
+</html>
