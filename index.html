@@ -473,6 +473,59 @@
       e.target.reset();
     });
 
+    onSnapshot(query(attractionsRef, orderBy("tsClient","desc")), snap => {
+  const board = document.getElementById("attractionsBoard");
+  board.innerHTML = "";
+  snap.forEach(docSnap => {
+    const d = docSnap.data();
+    const item = document.createElement("div");
+    item.className = "item";
+
+    const main = document.createElement("div");
+    main.className = "item-main";
+    main.innerHTML = `
+      <strong>${d.name || "Attraction"}</strong>
+      <div>Added by ${d.addedBy || "Unknown"}</div>
+      <div>Price: ${d.price || "-"}</div>
+      <div class="item-meta">Posted: ${fmt(d.tsServer) || fmt(d.tsClient)}</div>
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    // Book Now button
+    const bookBtn = document.createElement("button");
+    bookBtn.className = "btn";
+    bookBtn.textContent = "Book Now";
+    bookBtn.onclick = () => {
+      alert(`Booking ${d.name} for ${d.price}!`);
+      // Here you can later add real booking logic
+    };
+
+    // Edit/Delete buttons
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn"; editBtn.textContent = "Edit";
+    editBtn.onclick = async () => {
+      const newName = prompt("Edit attraction name:", d.name);
+      const newPrice = prompt("Edit price:", d.price);
+      if (newName && newPrice) await updateDoc(doc(db, "attractions", docSnap.id), { name: newName, price: newPrice });
+    };
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn"; delBtn.textContent = "Delete";
+    delBtn.onclick = async () => { if (confirm("Delete this attraction?")) await deleteDoc(doc(db, "attractions", docSnap.id)); };
+
+    actions.appendChild(bookBtn);
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(main);
+    item.appendChild(actions);
+    board.appendChild(item);
+  });
+});
+
+
     /* ---------------- Calendar ---------------- */
     const calendarRef = collection(db, "calendar");
     function buildCalendar(events) {
@@ -543,4 +596,5 @@
   </script>
 </body>
 </html>
+
 
