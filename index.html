@@ -500,6 +500,21 @@
     bookBtn.onclick = () => {
       alert(`Booking ${d.name} for ${d.price}!`);
       // Here you can later add real booking logic
+      const bookBtn = document.createElement("button");
+bookBtn.className = "btn";
+bookBtn.textContent = "Book Now";
+bookBtn.onclick = async () => {
+  // Save booking to Firestore
+  await addDoc(collection(db, "bookings"), {
+    attractionId: docSnap.id,
+    attractionName: d.name,
+    price: d.price,
+    bookedAt: serverTimestamp(),
+    bookedBy: "Anonymous" // or capture user name if you want
+  });
+  alert(`Booking saved for ${d.name}!`);
+};
+
     };
 
     // Edit/Delete buttons
@@ -596,6 +611,7 @@
   </script>
 </body>
 </html>
+
 
 
 
