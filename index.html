@@ -15,6 +15,7 @@
     nav ul { list-style:none; display:flex; flex-wrap:wrap; gap:.5rem; padding:.6rem; margin:0; justify-content:center; }
     nav a { color:var(--neon); text-decoration:none; padding:.4rem .8rem; border:1px solid var(--neon); border-radius:4px; font-weight:600; }
     nav a:hover, .btn:hover { background:var(--neon); color:var(--bg); }
+
     section { max-width:1100px; margin:1rem auto; padding:1rem; }
     h2 { border-bottom:2px solid var(--neon); padding-bottom:.3rem; }
     .panel { background:var(--panel); border:1px solid var(--neon); border-radius:8px; padding:1rem; }
@@ -45,11 +46,10 @@
       <li><a href="#stories">Stories</a></li>
       <li><a href="#news">News</a></li>
       <li><a href="#announcements">Announcements</a></li>
-      <li><a href="admin.html">Bookings Admin</a></li>
-
       <li><a href="#admins">Admins</a></li>
       <li><a href="#attractions">Attractions</a></li>
       <li><a href="#calendar">Calendar</a></li>
+      <li><a href="admin.html">Bookings Admin</a></li>
     </ul>
   </nav>
 
@@ -57,7 +57,7 @@
   <section id="chat">
     <h2>Chat</h2>
     <div class="panel">
-      <div id="messages" class="list"></div>
+      <div id="messagesBoard" class="list"></div>
       <form id="messageForm">
         <input id="messageName" placeholder="Your name" required />
         <input id="messageText" placeholder="Type message..." required />
@@ -87,7 +87,7 @@
       <form id="storyForm">
         <input id="storyName" placeholder="Your name" required />
         <input id="storyTitle" placeholder="Title" required />
-        <textarea id="storyContent" placeholder="Content" required></textarea>
+        <textarea id="storyContent" placeholder="Content..." required></textarea>
         <button type="submit">Add story</button>
       </form>
     </div>
@@ -184,217 +184,206 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleString() : "";
-
-    // Utility to render an item with consistent UI and actions
-    function renderItem({nameLine, bodyLines = [], ts, actions = []}) {
-      const item = document.createElement("div");
-      item.className = "item";
-      const main = document.createElement("div");
-      main.className = "item-main";
-      main.innerHTML = `<strong>${nameLine}</strong>${bodyLines.map(l => `<div>${l}</div>`).join("")}<div class="item-meta">Posted: ${fmt(ts)}</div>`;
-      const act = document.createElement("div");
-      act.className = "actions";
-      actions.forEach(btn => act.appendChild(btn));
-      item.appendChild(main);
-      item.appendChild(act);
+    const el = (id) => document.getElementById(id);
+    const mkBtn = (label, handler) => { const b=document.createElement("button"); b.className="btn"; b.textContent=label; b.onclick=handler; return b; };
+    function renderItem({title, lines=[], ts, actions=[]}) {
+      const item=document.createElement("div"); item.className="item";
+      const main=document.createElement("div"); main.className="item-main";
+      main.innerHTML = `<strong>${title}</strong>${lines.map(l=>`<div>${l}</div>`).join("")}<div class="item-meta">Posted: ${fmt(ts)}</div>`;
+      const act=document.createElement("div"); act.className="actions";
+      actions.forEach(a=>act.appendChild(a));
+      item.appendChild(main); item.appendChild(act);
       return item;
     }
-    const mkBtn = (label, handler) => { const b = document.createElement("button"); b.className = "btn"; b.textContent = label; b.onclick = handler; return b; };
 
     /* ---------------- Chat (Edit/Delete) ---------------- */
-    const messagesRef = collection(db, "messages");
-    onSnapshot(query(messagesRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("messages");
-      board.innerHTML = "";
+    const messagesRef = collection(db,"messages");
+    onSnapshot(query(messagesRef,orderBy("tsClient","desc")), snap => {
+      const board = el("messagesBoard"); board.innerHTML = "";
       snap.forEach(docSnap => {
         const d = docSnap.data();
         const edit = mkBtn("Edit", async () => {
           const newText = prompt("Edit message:", d.text || "");
-          if (newText?.trim()) await updateDoc(doc(db, "messages", docSnap.id), { text: newText.trim() });
+          if (newText?.trim()) await updateDoc(doc(db,"messages",docSnap.id), { text: newText.trim() });
         });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this message?")) await deleteDoc(doc(db, "messages", docSnap.id)); });
+        const del = mkBtn("Delete", async () => { if (confirm("Delete this message?")) await deleteDoc(doc(db,"messages",docSnap.id)); });
         board.appendChild(renderItem({
-          nameLine: d.name || "User",
-          bodyLines: [d.text || ""],
+          title: d.name || "User",
+          lines: [d.text || ""],
           ts: d.tsServer || d.tsClient,
           actions: [edit, del]
         }));
       });
     });
-    document.getElementById("messageForm").addEventListener("submit", async (e) => {
+    el("messageForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = document.getElementById("messageName").value.trim();
-      const text = document.getElementById("messageText").value.trim();
+      const name = el("messageName").value.trim();
+      const text = el("messageText").value.trim();
       if (!name || !text) return;
       await addDoc(messagesRef, { name, text, tsClient: Date.now(), tsServer: serverTimestamp() });
       e.target.reset();
     });
 
     /* ---------------- Notes (Edit/Delete) ---------------- */
-    const notesRef = collection(db, "notes");
-    onSnapshot(query(notesRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("notesBoard");
-      board.innerHTML = "";
+    const notesRef = collection(db,"notes");
+    onSnapshot(query(notesRef,orderBy("tsClient","desc")), snap => {
+      const board = el("notesBoard"); board.innerHTML = "";
       snap.forEach(docSnap => {
         const d = docSnap.data();
         const edit = mkBtn("Edit", async () => {
           const newText = prompt("Edit note:", d.text || "");
-          if (newText?.trim()) await updateDoc(doc(db, "notes", docSnap.id), { text: newText.trim() });
+          if (newText?.trim()) await updateDoc(doc(db,"notes",docSnap.id), { text: newText.trim() });
         });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this note?")) await deleteDoc(doc(db, "notes", docSnap.id)); });
+        const del = mkBtn("Delete", async () => { if (confirm("Delete this note?")) await deleteDoc(doc(db,"notes",docSnap.id)); });
         board.appendChild(renderItem({
-          nameLine: d.name || "User",
-          bodyLines: [d.text || ""],
+          title: d.name || "User",
+          lines: [d.text || ""],
           ts: d.tsServer || d.tsClient,
           actions: [edit, del]
         }));
       });
     });
-    document.getElementById("noteForm").addEventListener("submit", async (e) => {
+    el("noteForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = document.getElementById("noteName").value.trim();
-      const text = document.getElementById("noteText").value.trim();
+      const name = el("noteName").value.trim();
+      const text = el("noteText").value.trim();
       if (!name || !text) return;
       await addDoc(notesRef, { name, text, tsClient: Date.now(), tsServer: serverTimestamp() });
       e.target.reset();
     });
 
     /* ---------------- Stories (Edit/Delete) ---------------- */
-    const storiesRef = collection(db, "stories");
-    onSnapshot(query(storiesRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("storiesBoard");
-      board.innerHTML = "";
+    const storiesRef = collection(db,"stories");
+    onSnapshot(query(storiesRef,orderBy("tsClient","desc")), snap => {
+      const board = el("storiesBoard"); board.innerHTML = "";
       snap.forEach(docSnap => {
         const d = docSnap.data();
         const edit = mkBtn("Edit", async () => {
           const newTitle = prompt("Edit title:", d.title || "");
           const newContent = prompt("Edit content:", d.content || "");
-          if (newTitle?.trim() && newContent?.trim()) await updateDoc(doc(db, "stories", docSnap.id), { title: newTitle.trim(), content: newContent.trim() });
+          if (newTitle?.trim() && newContent?.trim()) await updateDoc(doc(db,"stories",docSnap.id), { title: newTitle.trim(), content: newContent.trim() });
         });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this story?")) await deleteDoc(doc(db, "stories", docSnap.id)); });
+        const del = mkBtn("Delete", async () => { if (confirm("Delete this story?")) await deleteDoc(doc(db,"stories",docSnap.id)); });
         board.appendChild(renderItem({
-          nameLine: d.title || "Story",
-          bodyLines: [`by ${d.name || "Anonymous"}`, d.content || ""],
+          title: d.title || "Story",
+          lines: [`by ${d.name || "Anonymous"}`, d.content || ""],
           ts: d.tsServer || d.tsClient,
           actions: [edit, del]
         }));
       });
     });
-    document.getElementById("storyForm").addEventListener("submit", async (e) => {
+    el("storyForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = document.getElementById("storyName").value.trim();
-      const title = document.getElementById("storyTitle").value.trim();
-      const content = document.getElementById("storyContent").value.trim();
+      const name = el("storyName").value.trim();
+      const title = el("storyTitle").value.trim();
+      const content = el("storyContent").value.trim();
       if (!name || !title || !content) return;
       await addDoc(storiesRef, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
       e.target.reset();
     });
 
     /* ---------------- News (Edit/Delete) ---------------- */
-    const newsRef = collection(db, "news");
-    onSnapshot(query(newsRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("newsBoard");
-      board.innerHTML = "";
+    const newsRef = collection(db,"news");
+    onSnapshot(query(newsRef,orderBy("tsClient","desc")), snap => {
+      const board = el("newsBoard"); board.innerHTML = "";
       snap.forEach(docSnap => {
         const d = docSnap.data();
         const edit = mkBtn("Edit", async () => {
           const newTitle = prompt("Edit headline:", d.title || "");
           const newContent = prompt("Edit content:", d.content || "");
-          if (newTitle?.trim() && newContent?.trim()) await updateDoc(doc(db, "news", docSnap.id), { title: newTitle.trim(), content: newContent.trim() });
+          if (newTitle?.trim() && newContent?.trim()) await updateDoc(doc(db,"news",docSnap.id), { title: newTitle.trim(), content: newContent.trim() });
         });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this news item?")) await deleteDoc(doc(db, "news", docSnap.id)); });
+        const del = mkBtn("Delete", async () => { if (confirm("Delete this news item?")) await deleteDoc(doc(db,"news",docSnap.id)); });
         board.appendChild(renderItem({
-          nameLine: d.title || "Headline",
-          bodyLines: [`by ${d.name || "Anonymous"}`, d.content || ""],
+          title: d.title || "Headline",
+          lines: [`by ${d.name || "Anonymous"}`, d.content || ""],
           ts: d.tsServer || d.tsClient,
           actions: [edit, del]
         }));
       });
     });
-    document.getElementById("newsForm").addEventListener("submit", async (e) => {
+    el("newsForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = document.getElementById("newsName").value.trim();
-      const title = document.getElementById("newsTitle").value.trim();
-      const content = document.getElementById("newsContent").value.trim();
+      const name = el("newsName").value.trim();
+      const title = el("newsTitle").value.trim();
+      const content = el("newsContent").value.trim();
       if (!name || !title || !content) return;
       await addDoc(newsRef, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
       e.target.reset();
     });
 
     /* ---------------- Announcements (Edit/Delete) ---------------- */
-    const announcementsRef = collection(db, "announcements");
-    onSnapshot(query(announcementsRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("announcementsBoard");
-      board.innerHTML = "";
+    const announcementsRef = collection(db,"announcements");
+    onSnapshot(query(announcementsRef,orderBy("tsClient","desc")), snap => {
+      const board = el("announcementsBoard"); board.innerHTML = "";
       snap.forEach(docSnap => {
         const d = docSnap.data();
         const edit = mkBtn("Edit", async () => {
           const newTitle = prompt("Edit title:", d.title || "");
           const newContent = prompt("Edit details:", d.content || "");
-          if (newTitle?.trim() && newContent?.trim()) await updateDoc(doc(db, "announcements", docSnap.id), { title: newTitle.trim(), content: newContent.trim() });
+          if (newTitle?.trim() && newContent?.trim()) await updateDoc(doc(db,"announcements",docSnap.id), { title: newTitle.trim(), content: newContent.trim() });
         });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this announcement?")) await deleteDoc(doc(db, "announcements", docSnap.id)); });
+        const del = mkBtn("Delete", async () => { if (confirm("Delete this announcement?")) await deleteDoc(doc(db,"announcements",docSnap.id)); });
         board.appendChild(renderItem({
-          nameLine: d.title || "Announcement",
-          bodyLines: [`by ${d.name || "Anonymous"}`, d.content || ""],
+          title: d.title || "Announcement",
+          lines: [`by ${d.name || "Anonymous"}`, d.content || ""],
           ts: d.tsServer || d.tsClient,
           actions: [edit, del]
         }));
       });
     });
-    document.getElementById("announcementForm").addEventListener("submit", async (e) => {
+    el("announcementForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = document.getElementById("announcementName").value.trim();
-      const title = document.getElementById("announcementTitle").value.trim();
-      const content = document.getElementById("announcementContent").value.trim();
+      const name = el("announcementName").value.trim();
+      const title = el("announcementTitle").value.trim();
+      const content = el("announcementContent").value.trim();
       if (!name || !title || !content) return;
       await addDoc(announcementsRef, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
       e.target.reset();
     });
 
     /* ---------------- Admins (Edit/Delete) ---------------- */
-    const adminsRef = collection(db, "admins");
-    onSnapshot(query(adminsRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("adminsBoard");
-      board.innerHTML = "";
+    const adminsRef = collection(db,"admins");
+    onSnapshot(query(adminsRef,orderBy("tsClient","desc")), snap => {
+      const board = el("adminsBoard"); board.innerHTML = "";
       snap.forEach(docSnap => {
         const d = docSnap.data();
         const edit = mkBtn("Edit", async () => {
           const newName = prompt("Edit admin name:", d.name || "");
           const newRole = prompt("Edit role:", d.role || "");
-          if (newName?.trim() && newRole?.trim()) await updateDoc(doc(db, "admins", docSnap.id), { name: newName.trim(), role: newRole.trim() });
+          if (newName?.trim() && newRole?.trim()) await updateDoc(doc(db,"admins",docSnap.id), { name: newName.trim(), role: newRole.trim() });
         });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this admin?")) await deleteDoc(doc(db, "admins", docSnap.id)); });
+        const del = mkBtn("Delete", async () => { if (confirm("Delete this admin?")) await deleteDoc(doc(db,"admins",docSnap.id)); });
         board.appendChild(renderItem({
-          nameLine: d.name || "Admin",
-          bodyLines: [`Role: ${d.role || "-"}`],
+          title: d.name || "Admin",
+          lines: [`Role: ${d.role || "-"}`],
           ts: d.tsServer || d.tsClient,
           actions: [edit, del]
         }));
       });
     });
-    document.getElementById("adminForm").addEventListener("submit", async (e) => {
+    el("adminForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = document.getElementById("adminName").value.trim();
-      const role = document.getElementById("adminRole").value.trim();
+      const name = el("adminName").value.trim();
+      const role = el("adminRole").value.trim();
       if (!name || !role) return;
       await addDoc(adminsRef, { name, role, tsClient: Date.now(), tsServer: serverTimestamp() });
       e.target.reset();
     });
 
     /* ---------------- Attractions (Edit/Delete + Book Now -> bookings) ---------------- */
-    const attractionsRef = collection(db, "attractions");
-    onSnapshot(query(attractionsRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("attractionsBoard");
-      board.innerHTML = "";
+    const attractionsRef = collection(db,"attractions");
+    onSnapshot(query(attractionsRef,orderBy("tsClient","desc")), snap => {
+      const board = el("attractionsBoard"); board.innerHTML = "";
       snap.forEach(docSnap => {
         const d = docSnap.data();
         const book = mkBtn("Book Now", async () => {
-          await addDoc(collection(db, "bookings"), {
+          await addDoc(collection(db,"bookings"), {
             attractionId: docSnap.id,
             attractionName: d.name || "Attraction",
             price: d.price || "",
             bookedBy: d.addedBy || "Anonymous",
+            status: "Pending",
             bookedAt: serverTimestamp()
           });
           alert(`Booking saved for ${d.name || "Attraction"}!`);
@@ -402,32 +391,31 @@
         const edit = mkBtn("Edit", async () => {
           const newName = prompt("Edit attraction name:", d.name || "");
           const newPrice = prompt("Edit price:", d.price || "");
-          if (newName?.trim() && newPrice?.trim()) await updateDoc(doc(db, "attractions", docSnap.id), { name: newName.trim(), price: newPrice.trim() });
+          if (newName?.trim() && newPrice?.trim()) await updateDoc(doc(db,"attractions",docSnap.id), { name: newName.trim(), price: newPrice.trim() });
         });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this attraction?")) await deleteDoc(doc(db, "attractions", docSnap.id)); });
+        const del = mkBtn("Delete", async () => { if (confirm("Delete this attraction?")) await deleteDoc(doc(db,"attractions",docSnap.id)); });
         board.appendChild(renderItem({
-          nameLine: d.name || "Attraction",
-          bodyLines: [`Added by ${d.addedBy || "Unknown"}`, `Price: ${d.price || "-"}`],
+          title: d.name || "Attraction",
+          lines: [`Added by ${d.addedBy || "Unknown"}`, `Price: ${d.price || "-"}`],
           ts: d.tsServer || d.tsClient,
           actions: [book, edit, del]
         }));
       });
     });
-    document.getElementById("attractionForm").addEventListener("submit", async (e) => {
+    el("attractionForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const addedBy = document.getElementById("attractionAddedBy").value.trim();
-      const name = document.getElementById("attractionName").value.trim();
-      const price = document.getElementById("attractionPrice").value.trim();
+      const addedBy = el("attractionAddedBy").value.trim();
+      const name = el("attractionName").value.trim();
+      const price = el("attractionPrice").value.trim();
       if (!addedBy || !name || !price) return;
       await addDoc(attractionsRef, { addedBy, name, price, tsClient: Date.now(), tsServer: serverTimestamp() });
       e.target.reset();
     });
 
     /* ---------------- Calendar (Edit/Delete) ---------------- */
-    const calendarRef = collection(db, "calendar");
-    onSnapshot(query(calendarRef, orderBy("tsClient","desc")), snap => {
-      const board = document.getElementById("calendarBoard");
-      board.innerHTML = "";
+    const calendarRef = collection(db,"calendar");
+    onSnapshot(query(calendarRef,orderBy("tsClient","desc")), snap => {
+      const board = el("calendarBoard"); board.innerHTML = "";
       snap.forEach(docSnap => {
         const d = docSnap.data();
         const edit = mkBtn("Edit", async () => {
@@ -435,24 +423,24 @@
           const newDetails = prompt("Edit details:", d.details || "");
           const newDate = prompt("Edit date (YYYY-MM-DD):", d.date || "");
           if (newTitle?.trim() && newDetails?.trim() && newDate?.trim()) {
-            await updateDoc(doc(db, "calendar", docSnap.id), { title: newTitle.trim(), details: newDetails.trim(), date: newDate.trim() });
+            await updateDoc(doc(db,"calendar",docSnap.id), { title: newTitle.trim(), details: newDetails.trim(), date: newDate.trim() });
           }
         });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this event?")) await deleteDoc(doc(db, "calendar", docSnap.id)); });
+        const del = mkBtn("Delete", async () => { if (confirm("Delete this event?")) await deleteDoc(doc(db,"calendar",docSnap.id)); });
         board.appendChild(renderItem({
-          nameLine: d.title || "Event",
-          bodyLines: [`by ${d.name || "Anonymous"}`, `Date: ${d.date || ""}`, d.details || ""],
+          title: d.title || "Event",
+          lines: [`by ${d.name || "Anonymous"}`, `Date: ${d.date || ""}`, d.details || ""],
           ts: d.tsServer || d.tsClient,
           actions: [edit, del]
         }));
       });
     });
-    document.getElementById("calendarForm").addEventListener("submit", async (e) => {
+    el("calendarForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const name = document.getElementById("calendarName").value.trim();
-      const title = document.getElementById("calendarTitle").value.trim();
-      const date = document.getElementById("calendarDate").value.trim();
-      const details = document.getElementById("calendarDetails").value.trim();
+      const name = el("calendarName").value.trim();
+      const title = el("calendarTitle").value.trim();
+      const date = el("calendarDate").value.trim();
+      const details = el("calendarDetails").value.trim();
       if (!name || !title || !date || !details) return;
       await addDoc(calendarRef, { name, title, date, details, tsClient: Date.now(), tsServer: serverTimestamp() });
       e.target.reset();
@@ -460,5 +448,3 @@
   </script>
 </body>
 </html>
-
-
