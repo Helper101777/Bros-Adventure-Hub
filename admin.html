@@ -7,13 +7,15 @@
   <style>
     :root { --bg:#0d0d0d; --panel:#1a1a1a; --neon:#00ff66; --muted:#82ffa6; }
     body { margin:0; background:var(--bg); color:var(--neon); font-family:system-ui; }
-    header { padding:1.5rem; text-align:center; background:var(--panel); border-bottom:2px solid var(--neon); }
+    header { padding:1.25rem; text-align:center; background:var(--panel); border-bottom:2px solid var(--neon); }
     h1 { margin:0; }
     nav { background:var(--bg); border-bottom:2px solid var(--neon); }
     nav ul { list-style:none; display:flex; gap:.5rem; padding:.6rem; margin:0; justify-content:center; }
     nav a { color:var(--neon); text-decoration:none; padding:.4rem .8rem; border:1px solid var(--neon); border-radius:4px; font-weight:600; }
     nav a:hover { background:var(--neon); color:var(--bg); }
-    .panel { background:var(--panel); border:1px solid var(--neon); border-radius:8px; padding:1rem; margin:1rem auto; max-width:900px; }
+    .wrap { max-width:1000px; margin:1rem auto; padding:0 1rem; }
+    .panel { background:var(--panel); border:1px solid var(--neon); border-radius:8px; padding:1rem; }
+    .controls { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:.6rem; margin-bottom:.8rem; }
     .list { display:flex; flex-direction:column; gap:.6rem; }
     .item { display:flex; justify-content:space-between; align-items:flex-start; border:1px dashed var(--neon); border-radius:6px; padding:.6rem; }
     .item-main { flex:1; white-space:pre-wrap; }
@@ -22,29 +24,55 @@
     .actions { display:flex; gap:.4rem; flex-wrap:wrap; }
     .btn { background:none; border:1px solid var(--neon); color:var(--neon); padding:.25rem .6rem; border-radius:4px; cursor:pointer; }
     .btn:hover { background:var(--neon); color:var(--bg); }
+    input, select { background:var(--bg); color:var(--neon); border:1px solid var(--neon); border-radius:6px; padding:.5rem; }
+    .stats { display:flex; gap:.8rem; flex-wrap:wrap; margin:.6rem 0; }
+    .pill { border:1px solid var(--neon); border-radius:999px; padding:.2rem .6rem; font-size:.9rem; }
   </style>
 </head>
 <body>
   <header>
     <h1>Bookings Admin</h1>
-    <div class="item-meta">Manage incoming bookings</div>
+    <div class="item-meta">Incoming bookings • Manage status, edits, and visibility</div>
   </header>
 
-  <!-- Navigation back to hub -->
   <nav>
     <ul>
       <li><a href="index.html">Back to Hub</a></li>
     </ul>
   </nav>
 
-  <div class="panel">
-    <div id="bookingsBoard" class="list"></div>
+  <div class="wrap">
+    <div class="panel">
+      <div class="controls">
+        <div>
+          <label for="adminName"><strong>Admin name</strong></label>
+          <input id="adminName" placeholder="Your admin name" />
+        </div>
+        <div>
+          <label for="searchInput"><strong>Search</strong></label>
+          <input id="searchInput" placeholder="Find by attraction or booked by" />
+        </div>
+        <div>
+          <label for="statusFilter"><strong>Status filter</strong></label>
+          <select id="statusFilter">
+            <option value="">All</option>
+            <option value="Pending">Pending</option>
+            <option value="Confirmed">Confirmed</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="stats" id="statsBar"></div>
+      <div id="bookingsBoard" class="list"></div>
+    </div>
   </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc
+      getFirestore, collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -59,62 +87,114 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleString() : "";
 
+    const el = (id) => document.getElementById(id);
+    const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleString() : "";
+    const mkBtn = (label, handler) => { const b=document.createElement("button"); b.className="btn"; b.textContent=label; b.onclick=handler; return b; };
+
+    // Live subscription
     const bookingsRef = collection(db, "bookings");
-    onSnapshot(query(bookingsRef, orderBy("bookedAt","desc")), snap => {
-      const board = document.getElementById("bookingsBoard");
+    let allBookings = [];
+
+    function renderStats(list) {
+      const counts = { Pending:0, Confirmed:0, Completed:0, Cancelled:0 };
+      list.forEach(b => counts[b.status || "Pending"] = (counts[b.status || "Pending"] || 0) + 1);
+      const total = list.length;
+      const bar = el("statsBar");
+      bar.innerHTML = `
+        <span class="pill">Total: ${total}</span>
+        <span class="pill">Pending: ${counts.Pending}</span>
+        <span class="pill">Confirmed: ${counts.Confirmed}</span>
+        <span class="pill">Completed: ${counts.Completed}</span>
+        <span class="pill">Cancelled: ${counts.Cancelled}</span>
+      `;
+    }
+
+    function applyFilters() {
+      const q = (el("searchInput").value || "").toLowerCase();
+      const status = el("statusFilter").value;
+      return allBookings.filter(b => {
+        const matchesText =
+          (b.attractionName || "").toLowerCase().includes(q) ||
+          (b.bookedBy || "").toLowerCase().includes(q);
+        const matchesStatus = !status || (b.status || "Pending") === status;
+        return matchesText && matchesStatus;
+      });
+    }
+
+    function renderList(list) {
+      const board = el("bookingsBoard");
       board.innerHTML = "";
-      snap.forEach(docSnap => {
-        const d = docSnap.data();
+      list.forEach(b => {
         const item = document.createElement("div");
         item.className = "item";
-
         const main = document.createElement("div");
         main.className = "item-main";
         main.innerHTML = `
-          <strong>${d.attractionName}</strong>
-          <div>Booked by ${d.bookedBy}</div>
-          <div>Price: ${d.price}</div>
-          <div>Status: ${d.status || "Pending"}</div>
-          <div class="item-meta">Booked at ${fmt(d.bookedAt)}</div>
+          <strong>${b.attractionName || "Attraction"}</strong>
+          <div>Booked by ${b.bookedBy || "Unknown"}</div>
+          <div>Price: ${b.price || "-"}</div>
+          <div>Status: ${b.status || "Pending"}</div>
+          <div class="item-meta">
+            Booked at ${fmt(b.bookedAt)}${b.statusUpdatedBy ? ` • Updated by ${b.statusUpdatedBy} at ${fmt(b.statusUpdatedAt)}` : ""}
+          </div>
         `;
 
         const actions = document.createElement("div");
         actions.className = "actions";
 
+        // Quick status buttons
+        const setStatus = (status) => async () => {
+          const admin = el("adminName").value.trim() || "Admin";
+          await updateDoc(doc(db,"bookings", b.id), {
+            status,
+            statusUpdatedBy: admin,
+            statusUpdatedAt: serverTimestamp()
+          });
+        };
+        actions.appendChild(mkBtn("Pending", setStatus("Pending")));
+        actions.appendChild(mkBtn("Confirm", setStatus("Confirmed")));
+        actions.appendChild(mkBtn("Complete", setStatus("Completed")));
+        actions.appendChild(mkBtn("Cancel", setStatus("Cancelled")));
+
         // Edit booking
-        const editBtn = document.createElement("button");
-        editBtn.className = "btn"; editBtn.textContent = "Edit";
-        editBtn.onclick = async () => {
-          const newName = prompt("Edit attraction name:", d.attractionName);
-          const newPrice = prompt("Edit price:", d.price);
-          const newStatus = prompt("Edit status (Pending/Confirmed):", d.status || "Pending");
-          if (newName?.trim() && newPrice?.trim()) {
-            await updateDoc(doc(db, "bookings", docSnap.id), {
+        actions.appendChild(mkBtn("Edit", async () => {
+          const newName = prompt("Edit attraction name:", b.attractionName || "");
+          const newPrice = prompt("Edit price:", b.price || "");
+          const newBookedBy = prompt("Edit booked by:", b.bookedBy || "");
+          if (newName?.trim() && newPrice?.trim() && newBookedBy?.trim()) {
+            await updateDoc(doc(db,"bookings", b.id), {
               attractionName: newName.trim(),
               price: newPrice.trim(),
-              status: newStatus.trim()
+              bookedBy: newBookedBy.trim()
             });
           }
-        };
+        }));
 
         // Delete booking
-        const delBtn = document.createElement("button");
-        delBtn.className = "btn"; delBtn.textContent = "Delete";
-        delBtn.onclick = async () => {
+        actions.appendChild(mkBtn("Delete", async () => {
           if (confirm("Delete this booking?")) {
-            await deleteDoc(doc(db, "bookings", docSnap.id));
+            await deleteDoc(doc(db,"bookings", b.id));
           }
-        };
+        }));
 
-        actions.appendChild(editBtn);
-        actions.appendChild(delBtn);
         item.appendChild(main);
         item.appendChild(actions);
         board.appendChild(item);
       });
+    }
+
+    onSnapshot(query(bookingsRef, orderBy("bookedAt","desc")), snap => {
+      allBookings = [];
+      snap.forEach(ds => allBookings.push({ id: ds.id, ...ds.data() }));
+      const filtered = applyFilters();
+      renderStats(filtered);
+      renderList(filtered);
     });
+
+    // React to controls
+    el("searchInput").addEventListener("input", () => { renderStats(applyFilters()); renderList(applyFilters()); });
+    el("statusFilter").addEventListener("change", () => { renderStats(applyFilters()); renderList(applyFilters()); });
   </script>
 </body>
 </html>
