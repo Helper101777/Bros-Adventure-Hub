@@ -387,19 +387,25 @@
             bookedAt: serverTimestamp()
           });
           alert(`Booking saved for ${d.name || "Attraction"}!`);
-        });
-        const edit = mkBtn("Edit", async () => {
-          const newName = prompt("Edit attraction name:", d.name || "");
-          const newPrice = prompt("Edit price:", d.price || "");
-          if (newName?.trim() && newPrice?.trim()) await updateDoc(doc(db,"attractions",docSnap.id), { name: newName.trim(), price: newPrice.trim() });
-        });
-        const del = mkBtn("Delete", async () => { if (confirm("Delete this attraction?")) await deleteDoc(doc(db,"attractions",docSnap.id)); });
-        board.appendChild(renderItem({
-          title: d.name || "Attraction",
-          lines: [`Added by ${d.addedBy || "Unknown"}`, `Price: ${d.price || "-"}`],
-          ts: d.tsServer || d.tsClient,
-          actions: [book, edit, del]
-        }));
+        const book = mkBtn("Book Now", async () => {
+  // Prompt the user for their name
+  const userName = prompt("Enter your name to book:", "");
+  if (!userName || !userName.trim()) {
+    alert("Booking cancelled — name is required.");
+    return;
+  }
+
+  await addDoc(collection(db, "bookings"), {
+    attractionId: docSnap.id,
+    attractionName: d.name || "Attraction",
+    price: d.price || "",
+    bookedBy: userName.trim(),       // use the entered name
+    status: "Pending",
+    bookedAt: serverTimestamp()
+  });
+
+  alert(`Booking saved for ${d.name || "Attraction"} under name ${userName.trim()}!`);
+});
       });
     });
     el("attractionForm").addEventListener("submit", async (e) => {
@@ -448,3 +454,4 @@
   </script>
 </body>
 </html>
+
