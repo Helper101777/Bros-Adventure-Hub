@@ -6,25 +6,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { --bg:#0d0d0d; --panel:#1a1a1a; --neon:#00ff66; --muted:#82ffa6; }
+    * { box-sizing:border-box }
     body { margin:0; background:var(--bg); color:var(--neon); font-family:system-ui, Trebuchet MS, sans-serif; }
     header { padding:1.5rem; text-align:center; background:var(--panel); border-bottom:2px solid var(--neon); }
-    nav { background:var(--bg); border-bottom:2px solid var(--neon); position:sticky; top:0; }
+    nav { background:var(--bg); border-bottom:2px solid var(--neon); position:sticky; top:0; z-index:10; }
     nav ul { list-style:none; display:flex; flex-wrap:wrap; gap:.5rem; padding:.6rem; margin:0; justify-content:center; }
     nav a { color:var(--neon); text-decoration:none; padding:.4rem .8rem; border:1px solid var(--neon); border-radius:4px; }
     nav a:hover { background:var(--neon); color:var(--bg); }
     section { max-width:1100px; margin:1rem auto; padding:1rem; }
-    h2 { border-bottom:2px solid var(--neon); padding-bottom:.3rem; }
+    h2 { border-bottom:2px solid var(--neon); padding-bottom:.3rem; margin-top:0; }
     .panel { background:var(--panel); border:1px solid var(--neon); border-radius:8px; padding:1rem; }
     .list { display:flex; flex-direction:column; gap:.6rem; }
-    .item { display:flex; justify-content:space-between; border:1px dashed var(--neon); border-radius:6px; padding:.6rem; }
+    .item { display:flex; justify-content:space-between; gap:.8rem; border:1px dashed var(--neon); border-radius:6px; padding:.6rem; }
     .item-main { flex:1; white-space:pre-wrap; }
+    .item-main strong { display:block; margin-bottom:.25rem; }
     .item-meta { color:var(--muted); font-size:.9rem; margin-top:.3rem; }
-    .actions { display:flex; gap:.4rem; }
+    .actions { display:flex; gap:.4rem; align-items:flex-start; }
     .btn { background:none; border:1px solid var(--neon); color:var(--neon); padding:.25rem .6rem; border-radius:4px; cursor:pointer; }
     .btn:hover { background:var(--neon); color:var(--bg); }
-    form { display:grid; gap:.6rem; margin-top:.8rem; }
+    form { display:grid; gap:.6rem; margin-top:.8rem; grid-template-columns:1fr 1fr; }
+    form textarea { grid-column:1/-1; min-height:90px; }
+    form button { grid-column:1/-1; }
     input, textarea, button { background:var(--bg); color:var(--neon); border:1px solid var(--neon); border-radius:6px; padding:.6rem; }
-    textarea { min-height:90px; }
+    .mono { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   </style>
 </head>
 <body>
@@ -35,7 +39,6 @@
 
   <nav>
     <ul>
-      <li><a href="index.html" class="active">Home</a></li>
       <li><a href="#chat">Chat</a></li>
       <li><a href="#notes">Notes</a></li>
       <li><a href="#stories">Stories</a></li>
@@ -157,19 +160,392 @@
       </form>
     </div>
   </section>
-
-  <script type="module">
+    <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
     import {
       getFirestore, collection, addDoc, serverTimestamp,
       onSnapshot, query, orderBy, doc, updateDoc, deleteDoc
     } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-    // ✅ Firebase config
+    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyAOWDg95YOPCBYzN5vWOVBik0AUNOyqZeI",
       authDomain: "bros-hub-cdbf2.firebaseapp.com",
       projectId: "bros-hub-cdbf2",
       storageBucket: "bros-hub-cdbf2.firebasestorage.app",
       messagingSenderId: "704367128264",
-      appId: "1:704367128264:web:2234b7b809
+      appId: "1:704367128264:web:2234b7b809a4691b327ffd",
+      measurementId: "G-1DG5BKM4SH"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleString() : "";
+
+    // Small helpers
+    const $ = (id) => document.getElementById(id);
+    const mk = (tag, cls) => { const el=document.createElement(tag); if(cls) el.className=cls; return el; };
+    const mkBtn = (label, fn) => { const b=mk("button","btn"); b.textContent=label; b.onclick=fn; return b; };
+
+    // Generic renderer for simple name+text items
+    function renderSimple(boardId, snap, fields, coll) {
+      const board = $(boardId);
+      board.innerHTML = "";
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        const item = mk("div","item");
+        const main = mk("div","item-main");
+
+        // Title line (strong)
+        const strong = mk("strong");
+        strong.textContent = fields.title(d);
+        main.appendChild(strong);
+
+        // Body line
+        const body = mk("div");
+        body.textContent = fields.body(d);
+        main.appendChild(body);
+
+        // Timestamp
+        const meta = mk("div","item-meta");
+        meta.textContent = "Sent: " + fmt(d.tsServer);
+        main.appendChild(meta);
+
+        const actions = mk("div","actions");
+        const edit = mkBtn("Edit", async () => {
+          const val = prompt("Edit:", fields.body(d));
+          if (val && val.trim()) await updateDoc(doc(db, coll, docSnap.id), fields.edit(val.trim(), d));
+        });
+        const del = mkBtn("Delete", async () => {
+          if (confirm("Delete this item?")) await deleteDoc(doc(db, coll, docSnap.id));
+        });
+        actions.appendChild(edit); actions.appendChild(del);
+
+        item.appendChild(main); item.appendChild(actions);
+        board.appendChild(item);
+      });
+    }
+          // Chat
+    {
+      const coll = "messages";
+      const ref = collection(db, coll);
+      onSnapshot(query(ref, orderBy("tsClient","desc")), snap => {
+        renderSimple("messagesBoard", snap, {
+          title: d => d.name || "User",
+          body:  d => d.text || "",
+          edit: (val, d) => ({ text: val })
+        }, coll);
+      });
+      $("messageForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = $("messageName").value.trim();
+        const text = $("messageText").value.trim();
+        if (!name || !text) return;
+        await addDoc(ref, { name, text, tsClient: Date.now(), tsServer: serverTimestamp() });
+        e.target.reset();
+      });
+    }
+
+    // Notes
+    {
+      const coll = "notes";
+      const ref = collection(db, coll);
+      onSnapshot(query(ref, orderBy("tsClient","desc")), snap => {
+        renderSimple("notesBoard", snap, {
+          title: d => d.name || "User",
+          body:  d => d.text || "",
+          edit: (val, d) => ({ text: val })
+        }, coll);
+      });
+      $("noteForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = $("noteName").value.trim();
+        const text = $("noteText").value.trim();
+        if (!name || !text) return;
+        await addDoc(ref, { name, text, tsClient: Date.now(), tsServer: serverTimestamp() });
+        e.target.reset();
+      });
+    }
+
+    // Stories
+    {
+      const coll = "stories";
+      const ref = collection(db, coll);
+      onSnapshot(query(ref, orderBy("tsClient","desc")), snap => {
+        const board = $("storiesBoard"); board.innerHTML="";
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const item = mk("div","item");
+          const main = mk("div","item-main");
+
+          const strong = mk("strong"); strong.textContent = d.title || "Untitled"; main.appendChild(strong);
+          const by = mk("div"); by.textContent = "By: " + (d.name || "User"); main.appendChild(by);
+          const body = mk("div"); body.textContent = d.content || ""; main.appendChild(body);
+          const meta = mk("div","item-meta"); meta.textContent = "Posted: " + fmt(d.tsServer); main.appendChild(meta);
+
+          const actions = mk("div","actions");
+          const edit = mkBtn("Edit", async () => {
+            const newTitle = prompt("Edit title:", d.title || "");
+            const newContent = prompt("Edit content:", d.content || "");
+            if (newTitle?.trim() || newContent?.trim()) {
+              await updateDoc(doc(db, coll, docSnap.id), {
+                title: (newTitle ?? d.title)?.trim() || d.title || "",
+                content: (newContent ?? d.content)?.trim() || d.content || ""
+              });
+            }
+          });
+          const del = mkBtn("Delete", async () => { if(confirm("Delete story?")) await deleteDoc(doc(db, coll, docSnap.id)); });
+          actions.appendChild(edit); actions.appendChild(del);
+
+          item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+        });
+      });
+      $("storyForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = $("storyName").value.trim();
+        const title = $("storyTitle").value.trim();
+        const content = $("storyContent").value.trim();
+        if (!name || !title || !content) return;
+        await addDoc(ref, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
+        e.target.reset();
+      });
+    }
+
+    // News
+    {
+      const coll = "news";
+      const ref = collection(db, coll);
+      onSnapshot(query(ref, orderBy("tsClient","desc")), snap => {
+        const board = $("newsBoard"); board.innerHTML="";
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const item = mk("div","item");
+          const main = mk("div","item-main");
+
+          const strong = mk("strong"); strong.textContent = d.title || "Headline"; main.appendChild(strong);
+          const by = mk("div"); by.textContent = "By: " + (d.name || "User"); main.appendChild(by);
+          const body = mk("div"); body.textContent = d.content || ""; main.appendChild(body);
+          const meta = mk("div","item-meta"); meta.textContent = "Posted: " + fmt(d.tsServer); main.appendChild(meta);
+
+          const actions = mk("div","actions");
+          const edit = mkBtn("Edit", async () => {
+            const newTitle = prompt("Edit headline:", d.title || "");
+            const newContent = prompt("Edit content:", d.content || "");
+            if (newTitle?.trim() || newContent?.trim()) {
+              await updateDoc(doc(db, coll, docSnap.id), {
+                title: (newTitle ?? d.title)?.trim() || d.title || "",
+                content: (newContent ?? d.content)?.trim() || d.content || ""
+              });
+            }
+          });
+          const del = mkBtn("Delete", async () => { if(confirm("Delete news?")) await deleteDoc(doc(db, coll, docSnap.id)); });
+          actions.appendChild(edit); actions.appendChild(del);
+
+          item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+        });
+      });
+      $("newsForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = $("newsName").value.trim();
+        const title = $("newsTitle").value.trim();
+        const content = $("newsContent").value.trim();
+        if (!name || !title || !content) return;
+        await addDoc(ref, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
+        e.target.reset();
+      });
+    }
+
+    // Announcements
+    {
+      const coll = "announcements";
+      const ref = collection(db, coll);
+      onSnapshot(query(ref, orderBy("tsClient","desc")), snap => {
+        const board = $("announcementsBoard"); board.innerHTML="";
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const item = mk("div","item");
+          const main = mk("div","item-main");
+
+          const strong = mk("strong"); strong.textContent = d.title || "Announcement"; main.appendChild(strong);
+          const by = mk("div"); by.textContent = "By: " + (d.name || "User"); main.appendChild(by);
+          const body = mk("div"); body.textContent = d.content || ""; main.appendChild(body);
+          const meta = mk("div","item-meta"); meta.textContent = "Posted: " + fmt(d.tsServer); main.appendChild(meta);
+
+          const actions = mk("div","actions");
+          const edit = mkBtn("Edit", async () => {
+            const newTitle = prompt("Edit title:", d.title || "");
+            const newContent = prompt("Edit details:", d.content || "");
+            if (newTitle?.trim() || newContent?.trim()) {
+              await updateDoc(doc(db, coll, docSnap.id), {
+                title: (newTitle ?? d.title)?.trim() || d.title || "",
+                content: (newContent ?? d.content)?.trim() || d.content || ""
+              });
+            }
+          });
+          const del = mkBtn("Delete", async () => { if(confirm("Delete announcement?")) await deleteDoc(doc(db, coll, docSnap.id)); });
+          actions.appendChild(edit); actions.appendChild(del);
+
+          item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+        });
+      });
+      $("announcementForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = $("announcementName").value.trim();
+        const title = $("announcementTitle").value.trim();
+        const content = $("announcementContent").value.trim();
+        if (!name || !title || !content) return;
+        await addDoc(ref, { name, title, content, tsClient: Date.now(), tsServer: serverTimestamp() });
+        e.target.reset();
+      });
+    }
+
+    // Admins
+    {
+      const coll = "admins";
+      const ref = collection(db, coll);
+      onSnapshot(query(ref, orderBy("tsClient","desc")), snap => {
+        const board = $("adminsBoard"); board.innerHTML="";
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const item = mk("div","item");
+          const main = mk("div","item-main");
+
+          const strong = mk("strong"); strong.textContent = d.name || "Admin"; main.appendChild(strong);
+          const role = mk("div"); role.textContent = "Role: " + (d.role || ""); main.appendChild(role);
+          const meta = mk("div","item-meta"); meta.textContent = "Added: " + fmt(d.tsServer); main.appendChild(meta);
+
+          const actions = mk("div","actions");
+          const edit = mkBtn("Edit", async () => {
+            const newName = prompt("Edit name:", d.name || "");
+            const newRole = prompt("Edit role:", d.role || "");
+            if (newName?.trim() || newRole?.trim()) {
+              await updateDoc(doc(db, coll, docSnap.id), {
+                name: (newName ?? d.name)?.trim() || d.name || "",
+                role: (newRole ?? d.role)?.trim() || d.role || ""
+              });
+            }
+          });
+          const del = mkBtn("Delete", async () => { if(confirm("Delete admin?")) await deleteDoc(doc(db, coll, docSnap.id)); });
+          actions.appendChild(edit); actions.appendChild(del);
+
+          item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+        });
+      });
+      $("adminForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = $("adminName").value.trim();
+        const role = $("adminRole").value.trim();
+        if (!name || !role) return;
+        await addDoc(ref, { name, role, tsClient: Date.now(), tsServer: serverTimestamp() });
+        e.target.reset();
+      });
+    }
+
+    // Attractions (with Book Now)
+    {
+      const coll = "attractions";
+      const ref = collection(db, coll);
+      onSnapshot(query(ref, orderBy("tsClient","desc")), snap => {
+        const board = $("attractionsBoard"); board.innerHTML="";
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const item = mk("div","item");
+          const main = mk("div","item-main");
+
+          const strong = mk("strong"); strong.textContent = d.name || "Attraction"; main.appendChild(strong);
+          const by = mk("div"); by.textContent = "Added by: " + (d.addedBy || ""); main.appendChild(by);
+          const price = mk("div"); price.textContent = "Price: " + (d.price ?? ""); main.appendChild(price);
+          const meta = mk("div","item-meta"); meta.textContent = "Added: " + fmt(d.tsServer); main.appendChild(meta);
+
+          const actions = mk("div","actions");
+          const edit = mkBtn("Edit", async () => {
+            const newName = prompt("Edit name:", d.name || "");
+            const newPrice = prompt("Edit price:", String(d.price ?? ""));
+            if (newName?.trim() || newPrice?.trim()) {
+              await updateDoc(doc(db, coll, docSnap.id), {
+                name: (newName ?? d.name)?.trim() || d.name || "",
+                price: Number(newPrice ?? d.price ?? 0)
+              });
+            }
+          });
+          const del = mkBtn("Delete", async () => { if(confirm("Delete attraction?")) await deleteDoc(doc(db, coll, docSnap.id)); });
+          const book = mkBtn("Book Now", async () => {
+            const userName = prompt(`Booking for ${d.name || "Attraction"} — enter your name:`, "");
+            if (!userName || !userName.trim()) { alert("Booking cancelled — name is required."); return; }
+            await addDoc(collection(db, "bookings"), {
+              attractionId: docSnap.id,
+              attractionName: d.name || "Attraction",
+              price: d.price ?? "",
+              bookedBy: userName.trim(),
+              status: "Pending",
+              bookedAt: serverTimestamp()
+            });
+            alert(`Booking saved for ${d.name || "Attraction"} under name ${userName.trim()}.`);
+          });
+          actions.appendChild(edit); actions.appendChild(del); actions.appendChild(book);
+
+          item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+        });
+      });
+      $("attractionForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const addedBy = $("attractionAddedBy").value.trim();
+        const name = $("attractionName").value.trim();
+        const price = $("attractionPrice").value.trim();
+        if (!addedBy || !name || !price) return;
+        await addDoc(ref, { addedBy, name, price: Number(price), tsClient: Date.now(), tsServer: serverTimestamp() });
+        e.target.reset();
+      });
+    }
+
+    // Calendar
+    {
+      const coll = "calendar";
+      const ref = collection(db, coll);
+      onSnapshot(query(ref, orderBy("tsClient","desc")), snap => {
+        const board = $("calendarBoard"); board.innerHTML="";
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const item = mk("div","item");
+          const main = mk("div","item-main");
+
+          const strong = mk("strong"); strong.textContent = d.title || "Event"; main.appendChild(strong);
+          const by = mk("div"); by.textContent = "By: " + (d.name || "User"); main.appendChild(by);
+          const date = mk("div"); date.textContent = "Date: " + (d.date || ""); main.appendChild(date);
+          const body = mk("div"); body.textContent = d.details || ""; main.appendChild(body);
+          const meta = mk("div","item-meta"); meta.textContent = "Added: " + fmt(d.tsServer); main.appendChild(meta);
+
+          const actions = mk("div","actions");
+          const edit = mkBtn("Edit", async () => {
+            const newTitle = prompt("Edit title:", d.title || "");
+            const newDate = prompt("Edit date (YYYY-MM-DD):", d.date || "");
+            const newDetails = prompt("Edit details:", d.details || "");
+            if (newTitle?.trim() || newDate?.trim() || newDetails?.trim()) {
+              await updateDoc(doc(db, coll, docSnap.id), {
+                title: (newTitle ?? d.title)?.trim() || d.title || "",
+                date: (newDate ?? d.date)?.trim() || d.date || "",
+                details: (newDetails ?? d.details)?.trim() || d.details || ""
+              });
+            }
+          });
+          const del = mkBtn("Delete", async () => { if(confirm("Delete event?")) await deleteDoc(doc(db, coll, docSnap.id)); });
+          actions.appendChild(edit); actions.appendChild(del);
+
+          item.appendChild(main); item.appendChild(actions); board.appendChild(item);
+        });
+      });
+      $("calendarForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = $("calendarName").value.trim();
+        const title = $("calendarTitle").value.trim();
+        const date = $("calendarDate").value.trim();
+        const details = $("calendarDetails").value.trim();
+        if (!name || !title || !date || !details) return;
+        await addDoc(ref, { name, title, date, details, tsClient: Date.now(), tsServer: serverTimestamp() });
+        e.target.reset();
+      });
+    }
+  </script>
+</body>
+</html>
